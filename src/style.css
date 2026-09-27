@@ -1,0 +1,66 @@
+/* Bundled arcade font — self-hosted so the game works fully offline
+   (and inside a packaged desktop build). */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./assets/fonts/press-start-2p.woff2') format('woff2');
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #0a0318;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* Flat, matching the in-game background so the letterbox area around the
+     canvas is indistinguishable from the play field. */
+  background: #1a0b34;
+  font-family: 'Press Start 2P', ui-monospace, 'SF Mono', Menlo, monospace;
+  -webkit-font-smoothing: none;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+#app canvas {
+  display: block;
+  /* Full-bleed: stretch to the window so there is never a letterbox margin. */
+  width: 100%;
+  height: 100%;
+}
+
+#loading {
+  position: absolute;
+  color: #8ea2ff;
+  font-size: 14px;
+  letter-spacing: 2px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "antivirus-95",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Antivirus 95: a gorgeous, procedurally-rendered arcade game where you command the daemons.",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc --noEmit",
+    "desktop": "npm run build && electron .",
+    "dist": "npm run build && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.21.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  },
+  "main": "electron/main.js",
+  "author": "Vitor",
+  "homepage": "https://www.vitormach.dev/antivirus-95/",
+  "engines": {
+    "node": ">=24"
+  },
+  "desktopName": "antivirus-95.desktop",
+  "productName": "Antivirus 95"
+}

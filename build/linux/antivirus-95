@@ -1,0 +1,41 @@
+#!/bin/sh
+# Antivirus 95 launcher for Linux; the Electron binary sits next to it as
+# antivirus-95-bin. Steam starts non-Steam games with its overlay preloaded and
+# its runtime's libraries first on the search path. Neither is meant for a
+# Chromium app, and either can hang it at start-up, before the app writes a
+# line of its own log. So: note what Steam passed in, clear both, then run.
+here=$(dirname "$(readlink -f "$0")")
+log_dir="${XDG_CONFIG_HOME:-$HOME/.config}/Antivirus 95"
+log="$log_dir/launch.log"
+mkdir -p "$log_dir" 2>/dev/null
+{
+  echo "launch $(date -Is 2>/dev/null) args: $*"
+  echo "LD_PRELOAD=${LD_PRELOAD-}"
+  echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH-}"
+  env | grep -E '^(SteamGameId|SteamAppId|SteamDeck|SteamOS|STEAM_COMPAT_|GAMESCOPE|DISPLAY|WAYLAND_DISPLAY|XDG_SESSION_TYPE)=' | sort
+} > "$log" 2>/dev/null
+unset LD_PRELOAD LD_LIBRARY_PATH
+# Started by Steam: Chromium's sandbox, which sets itself up before the app's
+# code runs, can hang there. The page only ever loads the bundled game
+# (app://, no navigation away), so it runs without the sandbox in that case.
+if [ -n "${SteamGameId-}" ]; then
+  set -- --no-sandbox "$@"
+  echo "started by Steam: --no-sandbox" >> "$log"
+  # Gaming Mode (gamescope, X11 only): Chromium presents GPU-composited
+  # frames through a Vulkan swapchain that never reaches the screen there —
+  # the game runs, the display stays black. Composite in software instead;
+  # WebGL still renders on the GPU.
+  if [ -z "${WAYLAND_DISPLAY-}" ]; then
+    set -- --disable-gpu-compositing "$@"
+    echo "gamescope: --disable-gpu-compositing" >> "$log"
+  fi
+fi
+# Extra Chromium flags for testing, e.g. Steam launch options
+# `ANTIVIRUS95_FLAGS="--use-angle=gl" %command%` (split on spaces).
+if [ -n "${ANTIVIRUS95_FLAGS-}" ]; then
+  # shellcheck disable=SC2086
+  set -- "$@" $ANTIVIRUS95_FLAGS
+  echo "ANTIVIRUS95_FLAGS: $ANTIVIRUS95_FLAGS" >> "$log"
+fi
+echo "exec antivirus-95-bin $*" >> "$log"
+exec "$here/antivirus-95-bin" "$@" >> "$log" 2>&1

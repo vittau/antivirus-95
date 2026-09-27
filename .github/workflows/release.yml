@@ -1,0 +1,112 @@
+name: Release
+
+# Push a tag (`npm version 0.2.0 && git push --follow-tags`) to build the
+# desktop apps and publish them as a GitHub release. The version shipped is
+# the tag's, not whatever package.json says.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Steam Deck / desktop Linux: a .tar.xz of the app folder, x64.
+          - os: ubuntu-24.04
+            platform: linux
+          - os: windows-2025
+            platform: win
+          # Apple Silicon runner; electron-builder also emits the x64 DMG.
+          - os: macos-15
+            platform: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not vX.Y.Z"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+
+      - name: Build the game
+        run: npm run build
+
+      - name: Package
+        shell: bash
+        run: >-
+          npx electron-builder --${{ matrix.platform }} --publish never
+          -c.extraMetadata.version=${{ steps.ver.outputs.version }}
+
+      - name: Pack the Linux folder
+        if: matrix.platform == 'linux'
+        working-directory: release
+        env:
+          XZ_OPT: -9 -T0
+        run: >-
+          tar --transform 's,^linux-unpacked,Antivirus-95,'
+          -cJf "Antivirus-95-${{ steps.ver.outputs.version }}-linux-x64.tar.xz"
+          linux-unpacked
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: antivirus-95-${{ matrix.platform }}
+          path: |
+            release/*.tar.xz
+            release/*.exe
+            release/*.dmg
+          if-no-files-found: error
+          # Already compressed; re-zipping only burns time.
+          compression-level: 0
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: out
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Antivirus 95 ${{ github.event.inputs.tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          files: out/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

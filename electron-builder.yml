@@ -1,0 +1,70 @@
+# Desktop packaging. `npm run dist` builds for the current OS; CI builds all
+# three on tag push (.github/workflows/release.yml). Each OS has its own job
+# and its own section below, so a platform can move to another shell later
+# without touching the others.
+appId: dev.vitormach.antivirus95
+productName: Antivirus 95
+copyright: Copyright © 2026 Vitor
+directories:
+  output: release
+  buildResources: build
+# Only the Vite bundle and the shell ship; the game's npm deps are already
+# bundled into dist/ (they're devDependencies for that reason).
+files:
+  - dist/**
+  - electron/**
+  - package.json
+asar: true
+# Chromium dominates the package size; trim what the game never uses. The UI
+# is English-only, so one locale is enough.
+electronLanguages: [en-US]
+compression: maximum
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+
+linux:
+  # Steam Deck: a plain folder with the `antivirus-95` binary. CI packs it as
+  # Antivirus-95/ in a .tar.xz (release.yml): a fixed folder name, so extracting
+  # an update over it keeps the Steam shortcut working.
+  target:
+    - target: dir
+      arch: [x64]
+  category: Game
+  # The binary is antivirus-95-bin; `antivirus-95` is the launcher script that
+  # cleans up Steam's environment first (build/linux/antivirus-95).
+  executableName: antivirus-95-bin
+  extraFiles:
+    - from: build/linux/antivirus-95
+      to: antivirus-95
+  syncDesktopName: true
+  synopsis: Arcade game where you are the daemon
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  artifactName: Antivirus-95-${version}-windows-${arch}-setup.${ext}
+portable:
+  artifactName: Antivirus-95-${version}-windows-${arch}-portable.${ext}
+
+mac:
+  target:
+    # One DMG per architecture: a universal build doubles the download.
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.arcade-games
+  # Ad-hoc signature: no Apple Developer ID yet, so Gatekeeper asks the player
+  # to confirm the first launch. Hardened runtime needs a real identity.
+  identity: '-'
+  hardenedRuntime: false
+  artifactName: Antivirus-95-${version}-macos-${arch}.${ext}
+
+publish: null
