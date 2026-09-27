@@ -45,10 +45,21 @@ export class GameAudio {
 
       this.master = ctx.createGain();
       this.master.gain.value = this.muted ? 0 : 0.85;
-      this.master.connect(ctx.destination);
+      // A limiter catches stacked effects now that the SFX bus runs hot.
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.value = -6;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.12;
+      this.master.connect(limiter);
+      limiter.connect(ctx.destination);
 
+      // The effects are synthesised quietly (peaks around -22 dBFS) while the
+      // mastered tracks sit near -17 dB RMS even at half volume, so the bus
+      // lifts them about 9 dB to sit level with, or just above, the music.
       this.sfxBus = ctx.createGain();
-      this.sfxBus.gain.value = 0.85;
+      this.sfxBus.gain.value = 2.4;
       this.sfxBus.connect(this.master);
 
       this.musicBus = ctx.createGain();
@@ -366,9 +377,9 @@ export class GameAudio {
    */
   bitEaten(): void {
     const f = TICK_NOTES[(Math.random() * TICK_NOTES.length) | 0];
-    this.tone(f, 0.032, { type: 'square', gain: 0.11 });
-    this.tone(f * 2, 0.018, { type: 'square', gain: 0.04, when: 0.004 });
-    this.noise(0.016, { gain: 0.035, type: 'highpass', freq: 5000 });
+    this.tone(f, 0.032, { type: 'square', gain: 0.054 });
+    this.tone(f * 2, 0.018, { type: 'square', gain: 0.02, when: 0.004 });
+    this.noise(0.016, { gain: 0.017, type: 'highpass', freq: 5000 });
   }
 
   powerUp(): void {
@@ -424,10 +435,36 @@ export class GameAudio {
     }
   }
 
-  ability(): void {
-    // Ability fires: a charge-up whoosh into a rising FM chirp.
-    this.noise(0.18, { gain: 0.06, type: 'bandpass', freq: 400, q: 1, slideTo: 3200, attack: 0.02 });
-    this.fm(300, 0.24, { mod: 900, index: 500, type: 'square', gain: 0.1, slideTo: 1200 });
+  /**
+   * The player's ability fires. A low impact thump says "something happened",
+   * then each daemon gets its own signature, long enough to carry over the
+   * music: OVERCLOCK revs up, HYPERLINK blips out and zaps in, BYPASS
+   * wobbles through the wall, FREEZE rings like ice.
+   */
+  ability(kind: 'dash' | 'warp' | 'phase' | 'blind'): void {
+    this.tone(130, 0.16, { type: 'sine', gain: 0.2, slideTo: 45 });
+    this.noise(0.05, { gain: 0.06, type: 'lowpass', freq: 900 });
+    switch (kind) {
+      case 'dash':
+        this.tone(160, 0.5, { type: 'sawtooth', gain: 0.075, slideTo: 880, attack: 0.03 });
+        this.tone(162, 0.5, { type: 'square', gain: 0.04, slideTo: 890, attack: 0.03 });
+        this.noise(0.45, { gain: 0.07, type: 'bandpass', freq: 500, q: 1.2, slideTo: 4000, attack: 0.05 });
+        break;
+      case 'warp':
+        [1568, 1175, 784].forEach((f, i) => this.tone(f, 0.05, { type: 'square', gain: 0.08, when: i * 0.045 }));
+        this.fm(180, 0.22, { mod: 700, index: 900, type: 'square', gain: 0.11, slideTo: 2400, when: 0.15 });
+        this.noise(0.12, { gain: 0.06, type: 'highpass', freq: 3000, when: 0.15 });
+        break;
+      case 'phase':
+        this.fm(330, 0.55, { mod: 11, index: 60, type: 'triangle', gain: 0.13, slideTo: 660 });
+        this.fm(333, 0.55, { mod: 7, index: 45, type: 'triangle', gain: 0.09, slideTo: 668, when: 0.02 });
+        this.noise(0.5, { gain: 0.05, type: 'bandpass', freq: 3000, q: 2, slideTo: 400, attack: 0.08 });
+        break;
+      case 'blind':
+        [2637, 3136, 3951].forEach((f, i) => this.tone(f, 0.7, { type: 'sine', gain: 0.049, when: i * 0.06, attack: 0.004 }));
+        this.noise(0.6, { gain: 0.032, type: 'highpass', freq: 6000, attack: 0.02 });
+        break;
+    }
   }
 
   /** Your ability is charged again: a short, bright chime. */
@@ -496,10 +533,13 @@ export class GameAudio {
   siren(intensity: number): void {
     const k = Math.max(0, Math.min(1, intensity));
     const hum = 55 + k * 75;
-    this.motor(hum, 0.42, 0.032, 0, k);
-    this.motor(hum * 1.008, 0.42, 0.024, 0, k);
-    this.noise(0.42, { gain: 0.016 + k * 0.016, type: 'bandpass', freq: 700 + k * 900, q: 0.7, attack: 0.04 });
-    this.tone(hum * 6, 0.42, { type: 'sine', gain: 0.012 + k * 0.012, attack: 0.05 });
+    // It never stops, so it stays under the music rather than riding the
+    // hot SFX bus at full level.
+    const trim = 0.45;
+    this.motor(hum, 0.42, 0.032 * trim, 0, k);
+    this.motor(hum * 1.008, 0.42, 0.024 * trim, 0, k);
+    this.noise(0.42, { gain: (0.016 + k * 0.016) * trim, type: 'bandpass', freq: 700 + k * 900, q: 0.7, attack: 0.04 });
+    this.tone(hum * 6, 0.42, { type: 'sine', gain: (0.012 + k * 0.012) * trim, attack: 0.05 });
   }
 
   // --- Music ---------------------------------------------------------------

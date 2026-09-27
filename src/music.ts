@@ -37,7 +37,8 @@ export class MusicPlayer {
 
   private idx = -1;
   private target = 0;
-  private readonly base = 0.5;
+  /** Track volume: about -10 dB, so the effects read over the music. */
+  private readonly base = 0.32;
   private muted = false;
   private ducked = false;
   private unlocked = false;

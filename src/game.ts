@@ -806,10 +806,10 @@ export class Game {
   private useAbility(): void {
     const g = this.playerDaemon;
     // Only while actively hunting. Being frightened, eaten, or waiting in the
-    // quarantine locks the ability — that's the cost of the power-pellet reversal.
+    // quarantine locks the ability — that's the cost of the infected-disk reversal.
     if (!g || g.cooldown > 0 || g.state !== 'normal') return;
     g.cooldown = g.def.cooldown;
-    this.audio.ability();
+    this.audio.ability(g.def.ability);
     this.fx.ring(g.px, g.py, g.def.color, TILE * 1.8, 0.35, 2.5);
     switch (g.def.ability) {
       case 'dash':
