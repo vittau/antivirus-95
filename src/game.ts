@@ -6,6 +6,7 @@ import {
   BLIND_TIME,
   FRIGHT_TIME,
   DAEMONS,
+  EXTRA_LIFE_EVERY,
   FONT_FAMILY,
   MAX_LIVES,
   MAZE_OFFSET_X,
@@ -126,6 +127,8 @@ export class Game {
   private high = 0;
   private level = 1;
   private lives = PLAYER_LIVES;
+  /** Score that earns the next extra life; it only moves up, so points lost and won back don't pay twice. */
+  private nextLifeAt = EXTRA_LIFE_EVERY;
   private virusLives = VIRUS_LIVES;
   /** Was the player's ability usable last frame? (For the "ready" cue.) */
   private abilityWasReady = true;
@@ -675,6 +678,7 @@ export class Game {
     this.level = 1;
     this.setupLevel(this.level);
     this.lives = PLAYER_LIVES;
+    this.nextLifeAt = EXTRA_LIFE_EVERY;
     this.gameOverPending = false;
     this.virusLives = VIRUS_LIVES;
     for (const g of this.daemons) g.isPlayer = false;
@@ -1254,6 +1258,14 @@ export class Game {
   private addScore(pts: number): void {
     this.score += pts;
     this.saveHigh();
+    while (this.score >= this.nextLifeAt) {
+      this.nextLifeAt += EXTRA_LIFE_EVERY;
+      if (this.lives < MAX_LIVES) {
+        this.lives++;
+        const g = this.playerDaemon;
+        this.fx.pop('1UP', g.px, g.py - 26, PALETTE.gold, 16);
+      }
+    }
   }
 
   private resolveCollisions(demo: boolean): void {
@@ -1307,11 +1319,6 @@ export class Game {
       this.phase = 'levelclear';
       this.levelClearTimer = 2.6;
       this.audio.levelClear();
-      if (this.lives < MAX_LIVES) {
-        this.lives++;
-        const g = this.playerDaemon;
-        this.fx.pop('1UP', g.px, g.py - 26, PALETTE.gold, 16);
-      }
     } else {
       this.message = 'QUARANTINED!';
       this.messageColor = PALETTE.gold;

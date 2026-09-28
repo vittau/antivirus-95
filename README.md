@@ -121,7 +121,7 @@ Pick your daemon on the title screen. The other three follow your orders.
 - An infected disk turns the tables: the virus gets an exploit and hunts, and
   it goes for *you* first. Your ability is locked until you recover.
 - Get deleted and you lose a life, and your daemon respawns in the
-  quarantine. You earn a life back for each level you clear, up to three.
+  quarantine. You earn a life back every 10,000 points, up to three.
 
 ## <img src="docs/readme/h-build.svg" alt="Build it" width="100%">
 

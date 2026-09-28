@@ -71,7 +71,8 @@ export const FRIGHT_FLASH = 2.2;
 
 export const VIRUS_LIVES = 3; // times you must quarantine the virus to clear a level
 export const PLAYER_LIVES = 3; // lost each time the virus deletes your daemon
-export const MAX_LIVES = 3; // clearing a level adds a life, up to this many
+export const MAX_LIVES = 3; // extra lives stop here
+export const EXTRA_LIFE_EVERY = 10000; // points per extra life
 export const RESPAWN_BANISH = 4.5; // seconds a caught daemon sits in the quarantine
 export const READY_TIME = 2.0;
 
