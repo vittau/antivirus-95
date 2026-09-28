@@ -41,15 +41,12 @@ export function setViewportWidth(width: number): void {
   CAM_MAX = Math.max(0, WORLD_H - SCREEN_H / MAZE_ZOOM);
 }
 
-/** Minimap scale factor for the side panel. */
-export const MINIMAP_SCALE = 0.18;
-
 // Speeds are expressed in tiles per second (classic arcade feel).
 export const SPEED = {
   virus: 8.6,
-  virusPowered: 10.4,
-  virusFury: 11.4, // powered and closing in on its prey
-  daemon: 8.0,
+  virusPowered: 9.6,
+  virusFury: 10.2, // powered and closing in on its prey
+  daemon: 8.4,
   daemonEaten: 15.0,
   playerDaemon: 8.6,
 };
@@ -60,9 +57,9 @@ export const TUNNEL_SLOW = 0.55;
 /**
  * Frightened daemons run at this fraction of their own normal speed: now full
  * speed, since power pellets come back (POWER_RESPAWN). A powered virus
- * still closes ~13 tiles over FRIGHT_TIME (1.8 tiles/s faster than the
- * player's 8.6), under the maze's median path distance of 20. A flat 5.2 let
- * it close 39+ (anywhere was in reach); 0.97, ~15.
+ * still closes ~7 tiles over FRIGHT_TIME (1.0 tiles/s faster than the
+ * player's 8.6), well under the maze's median path distance of 20. A flat 5.2
+ * would let it close 33+ (anywhere in reach); 0.97, ~9.
  */
 export const FRIGHT_SLOW = 1.0;
 
