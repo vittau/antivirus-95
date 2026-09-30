@@ -1,7 +1,7 @@
 {
   "name": "antivirus-95",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "description": "Antivirus 95: a gorgeous, procedurally-rendered arcade game where you command the daemons.",
   "scripts": {
