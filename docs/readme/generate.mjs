@@ -16,7 +16,7 @@ const C = {
   accent: '#ff4fd8',
   cyan: '#00e5ff',
   text: '#ffe6ff',
-  textDim: '#9d7fc4',
+  textDim: '#c3aaec',
   chrome0: '#bff4ff',
   chrome2: '#d9b8ff',
   sunTop: '#ffd76a',
@@ -36,12 +36,13 @@ const C = {
   virusG1: '#0aa865',
 };
 
-// The four antivirus daemons: living shields, one accent colour each.
+// The four antivirus daemons, one accent colour and one body shape each.
+// `rim` is the accent 55% of the way to white (the outline and antenna light).
 const DAEMONS = [
-  { name: 'VOLT', accent: '#ff3fb0', grad: 'gVolt', g0: '#ff7ccc', g1: '#b0226f' },
-  { name: 'RELAY', accent: '#00e5ff', grad: 'gRelay', g0: '#8ff4ff', g1: '#0a8aa0' },
-  { name: 'NULL', accent: '#b967ff', grad: 'gNull', g0: '#d7a8ff', g1: '#5e2aa8' },
-  { name: 'HALT', accent: '#ffc94d', grad: 'gHalt', g0: '#ffe29a', g1: '#b8741a' },
+  { name: 'VOLT', accent: '#ff3fb0', grad: 'gVolt', g0: '#ff7ccc', g1: '#b0226f', rim: '#ffa9db' },
+  { name: 'RELAY', accent: '#00e5ff', grad: 'gRelay', g0: '#8ff4ff', g1: '#0a8aa0', rim: '#8cf3ff' },
+  { name: 'NULL', accent: '#b967ff', grad: 'gNull', g0: '#d7a8ff', g1: '#5e2aa8', rim: '#e0bbff' },
+  { name: 'HALT', accent: '#ffc94d', grad: 'gHalt', g0: '#ffe29a', g1: '#b8741a', rim: '#ffe7af' },
 ];
 
 const style = `<style>@font-face{font-family:PS2P;src:url(data:font/woff2;base64,${font}) format('woff2')}text{font-family:PS2P,monospace}</style>`;
@@ -60,8 +61,35 @@ const daemonGrad = (d) => `<linearGradient id="${d.grad}" x1="0" y1="0" x2="0" y
       <stop offset="0" stop-color="${d.g0}"/><stop offset="1" stop-color="${d.g1}"/>
     </linearGradient>`;
 
-/** The shield body every daemon shares, in base units (fits a 46-unit box). */
-const SHIELD = 'M0,-18 L15,-12 L15,1 C15,10 8,16 0,19 C-8,16 -15,10 -15,1 L-15,-12 Z';
+/**
+ * Each daemon's body outline, in base units (fits a 46-unit box), as in
+ * draw.ts: VOLT's pointed shield, RELAY's monitor, NULL's dome, HALT's
+ * stop-sign octagon.
+ */
+const BODIES = [
+  'M0,-18 L15,-12 L15,0 C15,7 7,14 0,21 C-7,14 -15,7 -15,0 L-15,-12 Z',
+  'M10,-16 A5,5 0 0 1 15,-11 L15,8 C15,14 12,17 6,17 L-6,17 C-12,17 -15,14 -15,8 L-15,-11 A5,5 0 0 1 -10,-16 Z',
+  'M-15,-3 A15,15 0 0 1 15,-3 L15,4 C15,13 8,19 0,19 C-8,19 -15,13 -15,4 Z',
+  'M-6.5,-18 L6.5,-18 L15,-9.5 L15,9.5 L6.5,18 L-6.5,18 L-15,9.5 L-15,-9.5 Z',
+];
+
+/** Each daemon's antenna: VOLT's bolt, RELAY's dipole, NULL's halo, HALT's beacon. */
+function antenna(idx, rim) {
+  const line = `stroke="${C.bgDeep}" stroke-width=".8" stroke-linejoin="round"`;
+  if (idx === 0) {
+    return `<path d="M-1.6,-17.5 L1.6,-17.5 L3.6,-23 L1.2,-23 L4.4,-30 L-2.6,-21.6 L0.2,-21.6 Z" fill="${rim}" ${line}/>`;
+  }
+  if (idx === 1) {
+    return `<path d="M-3.5,-16 L-8,-24 M3.5,-16 L8,-24" stroke="${C.bgDeep}" stroke-width="1.3" stroke-linecap="round"/>
+    <circle cx="-8" cy="-24" r="2.3" fill="${rim}" ${line}/><circle cx="8" cy="-24" r="2.3" fill="${rim}" ${line}/>`;
+  }
+  if (idx === 2) {
+    return `<ellipse cx="0" cy="-24" rx="7.5" ry="2.4" fill="none" stroke="${C.bgDeep}" stroke-opacity=".7" stroke-width="3"/>
+    <ellipse cx="0" cy="-24" rx="7.5" ry="2.4" fill="none" stroke="${rim}" stroke-width="1.6"/>`;
+  }
+  return `<path d="M-3.8,-20.2 A3.8,3.8 0 0 1 3.8,-20.2 Z" fill="${rim}" ${line}/>
+    <rect x="-5" y="-20.2" width="10" height="2.6" fill="${C.bgDeep}"/>`;
+}
 
 /**
  * A daemon's face, in the shield's base units. `px` is the pupil glide; the
@@ -113,10 +141,9 @@ function daemon(x, y, size, idx, look = 1, facing = 1) {
   const k = size / 46;
   const px = 0.9 * look * facing;
   return `<g transform="translate(${x} ${y}) scale(${(facing * k).toFixed(4)} ${k.toFixed(4)})" filter="url(#glow)">
-    <path d="M0,-18 L0,-23" stroke="${C.bgDeep}" stroke-width="1"/>
-    <circle cx="0" cy="-24.5" r="2.6" fill="${d.accent}" stroke="${C.bgDeep}" stroke-width=".6"/>
-    <path d="${SHIELD}" fill="url(#${d.grad})" stroke="${C.bgDeep}" stroke-width=".9"/>
-    <path d="${SHIELD}" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width=".6" transform="scale(.82)"/>
+    <path d="${BODIES[idx]}" fill="url(#${d.grad})" stroke="${d.rim}" stroke-width="1.1"/>
+    <path d="${BODIES[idx]}" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width=".6" transform="scale(.82)"/>
+    ${antenna(idx, d.rim)}
     ${daemonFace(idx, px)}
   </g>`;
 }
@@ -142,11 +169,28 @@ function virus(x, y, size, look = 1, facing = 1) {
   </g>`;
 }
 
-/** The infected disk (power pellet): a green floppy with a wicked face. */
+/** Three hazard arcs around the disk, with a tick at each arc's head (as in draw.ts). */
+function hazardRing(r) {
+  const pt = (a, rr) => `${(Math.cos(a) * rr).toFixed(2)},${(Math.sin(a) * rr).toFixed(2)}`;
+  const sweep = (Math.PI * 2) / 3;
+  const arc = sweep * 0.62;
+  let arcs = '';
+  let ticks = '';
+  for (let i = 0; i < 3; i++) {
+    const a0 = -Math.PI / 2 + i * sweep;
+    arcs += `M${pt(a0, r)} A${r},${r} 0 0 1 ${pt(a0 + arc, r)} `;
+    ticks += `M${pt(a0 + arc, r - 2.5)} L${pt(a0 + arc, r + 2.5)} `;
+  }
+  return `<path d="${arcs.trim()}" fill="none" stroke="${C.virus}" stroke-opacity=".85" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="${ticks.trim()}" stroke="${C.virusG0}" stroke-opacity=".85" stroke-width="1.6" stroke-linecap="round"/>`;
+}
+
+/** The infected disk (power pellet): a green floppy with a wicked face, in its hazard ring. */
 function floppy(x, y, size) {
   const k = size / 18;
   return `<g transform="translate(${x} ${y}) scale(${k.toFixed(4)})" filter="url(#glow)">
     <circle r="15" fill="${C.virus}" fill-opacity=".16"/>
+    ${hazardRing(15.7)}
     <path d="M-9,-9 L6,-9 L9,-6 L9,9 L-9,9 Z" fill="url(#gVirus)" stroke="${C.virusInk}" stroke-width="1.2"/>
     <rect x="-5" y="-9" width="9" height="6" fill="${C.virusInk}"/>
     <rect x="1" y="-8" width="2" height="4" fill="${C.virus}"/>
