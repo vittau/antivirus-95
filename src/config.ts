@@ -131,7 +131,8 @@ export const PALETTE = {
   eyeWhite: 0xf7f4ff,
   eyePupil: 0x24104a,
   text: 0xffe6ff,
-  textDim: 0x9d7fc4,
+  // Secondary text. Bright enough to survive the CRT on a 7" screen.
+  textDim: 0xc3aaec,
   accent: 0xff4fd8,
   accent2: 0x00e5ff,
   danger: 0xff2d6e,

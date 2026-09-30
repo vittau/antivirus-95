@@ -13,6 +13,9 @@ import { SCREEN_H, SCREEN_W } from './config';
  *   - aperture-grille shadow mask
  *   - vignette + animated noise
  *   - gamma-ish brightness lift
+ *   - a calm zone (the HUD panel) where scanlines, bleed, noise and vignette
+ *     ease off so small text stays legible; the warp is left alone there, so
+ *     the picture stays one continuous screen
  *
  * Written as a GLSL ES 3.0 fragment program for Pixi v8's filter pipeline.
  */
@@ -41,6 +44,9 @@ uniform float uVignette;
 uniform float uNoise;
 uniform float uBrightness;
 uniform float uBleed;
+// Normalised x where the calm zone starts (>= 1: none), and its strength.
+uniform float uCalmX;
+uniform float uCalm;
 
 const float PI = 3.141592653589793;
 
@@ -76,15 +82,20 @@ void main(void) {
 
   vec2 px = 1.0 / max(uResolution, vec2(1.0));
 
+  // 0 on the play field, uCalm over the panel, with a few pixels of ramp so
+  // the seam never shows as a hard edge.
+  float calm = uCalm * smoothstep(uCalmX - 3.0 * px.x, uCalmX + 3.0 * px.x, uv.x);
+  float bleed = uBleed * (1.0 - calm);
+
   // Blargg-ish NTSC colour bleed: sample the channels slightly apart.
   vec3 col;
-  col.r = sampleScreen(uv + vec2(px.x * uBleed, 0.0), uvScale).r;
+  col.r = sampleScreen(uv + vec2(px.x * bleed, 0.0), uvScale).r;
   col.g = sampleScreen(uv, uvScale).g;
-  col.b = sampleScreen(uv - vec2(px.x * uBleed, 0.0), uvScale).b;
+  col.b = sampleScreen(uv - vec2(px.x * bleed, 0.0), uvScale).b;
 
   // Scanlines.
   float scan = 0.5 + 0.5 * sin(uv.y * uResolution.y * PI);
-  col *= 1.0 - uScanIntensity * (1.0 - scan);
+  col *= 1.0 - uScanIntensity * (1.0 - 0.7 * calm) * (1.0 - scan);
 
   // Aperture grille.
   float m = mod(floor(uv.x * uResolution.x), 3.0);
@@ -98,11 +109,11 @@ void main(void) {
   // never reaches black, so there is no abrupt band before the sides.
   if (uVignette > 0.001) {
     float d = distance(screen, vec2(0.5)) * 1.41421356;
-    col *= 1.0 - uVignette * smoothstep(0.55, 1.0, d);
+    col *= 1.0 - uVignette * (1.0 - 0.5 * calm) * smoothstep(0.55, 1.0, d);
   }
 
   // Animated noise.
-  col += (hash(uv * uResolution + fract(uTime) * 91.7) - 0.5) * uNoise;
+  col += (hash(uv * uResolution + fract(uTime) * 91.7) - 0.5) * uNoise * (1.0 - 0.7 * calm);
 
   col *= uBrightness;
 
@@ -118,6 +129,8 @@ export interface CrtOptions {
   noise?: number;
   brightness?: number;
   bleed?: number;
+  /** How much the calm zone eases the effect, 0..1 (see `calmFrom`). */
+  calm?: number;
 }
 
 interface CrtUniforms extends Record<string, unknown> {
@@ -130,6 +143,8 @@ interface CrtUniforms extends Record<string, unknown> {
   uNoise: number;
   uBrightness: number;
   uBleed: number;
+  uCalmX: number;
+  uCalm: number;
 }
 
 export class CrtGeomFilter extends Filter {
@@ -150,6 +165,8 @@ export class CrtGeomFilter extends Filter {
           uNoise: { value: options.noise ?? 0.035, type: 'f32' },
           uBrightness: { value: options.brightness ?? 1.1, type: 'f32' },
           uBleed: { value: options.bleed ?? 0.7, type: 'f32' },
+          uCalmX: { value: 1, type: 'f32' },
+          uCalm: { value: options.calm ?? 0.7, type: 'f32' },
         },
       },
     });
@@ -167,6 +184,11 @@ export class CrtGeomFilter extends Filter {
 
   set scanIntensity(v: number) {
     this.u.uScanIntensity = v;
+  }
+
+  /** Start the calm zone at this fraction of the screen width (>= 1: none). */
+  set calmFrom(x: number) {
+    this.u.uCalmX = x;
   }
 
   resize(w: number, h: number): void {

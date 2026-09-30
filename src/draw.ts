@@ -294,51 +294,92 @@ function daemonGradient(color: number, colorDark: number): FillGradient {
   return grad;
 }
 
-/** The shield outline as a path (scaled by `s`, optionally offset). */
-function shieldPath(g: Graphics, s: number, k = 1, ox = 0, oy = 0): void {
-  const X = (v: number): number => ox + v * s * k;
-  const Y = (v: number): number => oy + v * s * k;
-  g.moveTo(X(0), Y(-18));
-  g.lineTo(X(15), Y(-12));
-  g.lineTo(X(15), Y(1));
-  g.bezierCurveTo(X(15), Y(10), X(8), Y(16), X(0), Y(19));
-  g.bezierCurveTo(X(-8), Y(16), X(-15), Y(10), X(-15), Y(1));
-  g.lineTo(X(-15), Y(-12));
-  g.closePath();
+/*
+ * Each daemon has its own body outline, so the four read apart by shape in
+ * the maze and not only by colour: VOLT keeps the pointed shield, RELAY is a
+ * squat monitor, NULL a dome and HALT a stop-sign octagon. The outlines are
+ * sampled once, in the 15-unit space the faces are drawn in (y -18..21), as
+ * flat [x0,y0,x1,y1,...] loops; callers scale them by `s`.
+ */
+function sampleCubic(
+  out: number[],
+  x0: number,
+  y0: number,
+  c1x: number,
+  c1y: number,
+  c2x: number,
+  c2y: number,
+  x1: number,
+  y1: number,
+  steps = 6,
+): void {
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    out.push(
+      mt * mt * mt * x0 + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * x1,
+      mt * mt * mt * y0 + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * y1,
+    );
+  }
 }
 
-/** The shield outline sampled as a flat [x0,y0,x1,y1,...] loop, for dashes. */
-function shieldPoints(s: number, k = 1): number[] {
-  const pts: number[] = [];
-  const push = (x: number, y: number): void => {
-    pts.push(x * s * k, y * s * k);
-  };
-  push(0, -18);
-  push(15, -12);
-  push(15, 1);
-  const cubic = (
-    x0: number,
-    y0: number,
-    c1x: number,
-    c1y: number,
-    c2x: number,
-    c2y: number,
-    x1: number,
-    y1: number,
-  ): void => {
-    for (let i = 1; i <= 6; i++) {
-      const t = i / 6;
-      const mt = 1 - t;
-      push(
-        mt * mt * mt * x0 + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * x1,
-        mt * mt * mt * y0 + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * y1,
-      );
-    }
-  };
-  cubic(15, 1, 15, 10, 8, 16, 0, 19);
-  cubic(0, 19, -8, 16, -15, 10, -15, 1);
-  push(-15, -12);
-  return pts;
+function sampleArc(out: number[], cx: number, cy: number, r: number, a0: number, a1: number, steps: number): void {
+  for (let i = 0; i <= steps; i++) {
+    const a = a0 + ((a1 - a0) * i) / steps;
+    out.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+}
+
+function buildOutline(id: DaemonId): number[] {
+  const p: number[] = [];
+  switch (id) {
+    case 'volt':
+      // The classic shield, drawn to a sharp point: built for speed.
+      p.push(0, -18, 15, -12, 15, 0);
+      sampleCubic(p, 15, 0, 15, 7, 7, 14, 0, 21);
+      sampleCubic(p, 0, 21, -7, 14, -15, 7, -15, 0);
+      p.push(-15, -12);
+      break;
+    case 'relay':
+      // A squat monitor: flat top, rounded corners, slightly tapered base.
+      sampleArc(p, 10, -11, 5, -Math.PI / 2, 0, 4);
+      p.push(15, 8);
+      sampleCubic(p, 15, 8, 15, 14, 12, 17, 6, 17);
+      p.push(-6, 17);
+      sampleCubic(p, -6, 17, -12, 17, -15, 14, -15, 8);
+      sampleArc(p, -10, -11, 5, Math.PI, Math.PI * 1.5, 4);
+      break;
+    case 'null':
+      // A dome over a rounded base: no corners anywhere.
+      sampleArc(p, 0, -3, 15, Math.PI, Math.PI * 2, 12);
+      p.push(15, 4);
+      sampleCubic(p, 15, 4, 15, 13, 8, 19, 0, 19);
+      sampleCubic(p, 0, 19, -8, 19, -15, 13, -15, 4);
+      break;
+    case 'halt':
+      // A stop sign.
+      p.push(-6.5, -18, 6.5, -18, 15, -9.5, 15, 9.5, 6.5, 18, -6.5, 18, -15, 9.5, -15, -9.5);
+      break;
+  }
+  return p;
+}
+
+const OUTLINES = new Map<DaemonId, number[]>();
+
+/** The body outline as a flat loop, scaled by `s * k` and offset. */
+function bodyPoints(id: DaemonId, s: number, k = 1, ox = 0, oy = 0): number[] {
+  let unit = OUTLINES.get(id);
+  if (!unit) {
+    unit = buildOutline(id);
+    OUTLINES.set(id, unit);
+  }
+  const m = s * k;
+  return unit.map((v, i) => (i % 2 === 0 ? ox : oy) + v * m);
+}
+
+/** The body outline as a closed path (scaled by `s`, optionally offset). */
+function bodyPath(g: Graphics, id: DaemonId, s: number, k = 1, ox = 0, oy = 0): void {
+  g.poly(bodyPoints(id, s, k, ox, oy), true);
 }
 
 /** Stroke a closed sampled loop as dashes (Pixi strokes have no dash style). */
@@ -381,33 +422,78 @@ function dashPath(
   g.stroke({ width, color, alpha, cap: 'butt' });
 }
 
-/** Flat shield silhouette, used for afterimages and motion trails. */
+/** Flat body silhouette, used for afterimages and motion trails. */
 export function drawDaemonSilhouette(
   g: Graphics,
+  id: DaemonId,
   x: number,
   y: number,
   r: number,
   color: number,
   alpha: number,
 ): void {
-  shieldPath(g, r / 15, 1, x, y);
+  bodyPath(g, id, r / 15, 1, x, y);
   g.fill({ color, alpha });
 }
 
+/**
+ * The daemon's antenna, a second identity mark above the body: VOLT's
+ * lightning bolt, RELAY's dipole, NULL's floating halo, HALT's beacon. `tilt`
+ * leans it (radians); `led` is its lit part, `lineColor` the dark detail.
+ */
 function drawAntenna(
   g: Graphics,
+  id: DaemonId,
   s: number,
   tilt: number,
   led: number,
   lineColor: number,
 ): void {
-  const ax = Math.sin(tilt) * 5 * s;
-  const ay = -18 * s - Math.cos(tilt) * 5 * s;
-  const lx = Math.sin(tilt) * 6.5 * s;
-  const ly = -18 * s - Math.cos(tilt) * 6.5 * s;
-  g.moveTo(0, -18 * s).lineTo(ax, ay);
-  g.stroke({ width: 1.1 * s, color: lineColor, cap: 'round' });
-  g.circle(lx, ly, 2.6 * s).fill(led).stroke({ width: 0.7 * s, color: PALETTE.virusLine });
+  const top = id === 'relay' ? -16 : -18;
+  const cos = Math.cos(tilt);
+  const sin = Math.sin(tilt);
+  // Antenna-local (x, y) → body space, rotated about the mount point.
+  const P = (x: number, y: number): [number, number] => [(x * cos - y * sin) * s, (top + x * sin + y * cos) * s];
+  const line = { width: 0.8 * s, color: lineColor, join: 'round' as const };
+  switch (id) {
+    case 'volt': {
+      const bolt = [
+        [-1.6, 0.5],
+        [1.6, 0.5],
+        [3.6, -5],
+        [1.2, -5],
+        [4.4, -12],
+        [-2.6, -3.6],
+        [0.2, -3.6],
+      ].flatMap(([x, y]) => P(x, y));
+      g.poly(bolt, true).fill(led).stroke(line);
+      break;
+    }
+    case 'relay': {
+      for (const side of [-1, 1]) {
+        g.moveTo(...P(side * 3.5, 0)).lineTo(...P(side * 8, -8));
+        g.stroke({ width: 1.3 * s, color: lineColor, cap: 'round' });
+        g.circle(...P(side * 8, -8), 2.3 * s).fill(led).stroke(line);
+      }
+      break;
+    }
+    case 'null': {
+      // No stalk: the ring hovers over the dome.
+      const [hx, hy] = P(0, -6);
+      g.ellipse(hx, hy, 7.5 * s, 2.4 * s).stroke({ width: 3 * s, color: lineColor, alpha: 0.7 });
+      g.ellipse(hx, hy, 7.5 * s, 2.4 * s).stroke({ width: 1.6 * s, color: led });
+      break;
+    }
+    case 'halt': {
+      const arc: number[] = [];
+      sampleArc(arc, 0, -2.2, 3.8, Math.PI, Math.PI * 2, 8);
+      const dome: number[] = [];
+      for (let i = 0; i < arc.length; i += 2) dome.push(...P(arc[i], arc[i + 1]));
+      g.poly(dome, true).fill(led).stroke(line);
+      g.poly([P(-5, 0.4), P(5, 0.4), P(5, -2.2), P(-5, -2.2)].flat(), true).fill(lineColor);
+      break;
+    }
+  }
 }
 
 type EyeMode = 'open' | 'squint' | 'half' | 'wide';
@@ -496,12 +582,10 @@ export function drawDaemon(g: Graphics, r: number, style: DaemonStyle): void {
 
   if (style.eaten) {
     // DELETED, floating home: a dashed, empty shell, X eyes, sagging antenna.
-    shieldPath(g, s);
+    bodyPath(g, id, s);
     g.fill({ color: PALETTE.accent, alpha: 0.07 });
-    g.moveTo(0, -18 * s).quadraticCurveTo(4 * s, -20 * s, 7 * s, -20 * s);
-    g.stroke({ width: 1 * s, color: PALETTE.accent, cap: 'round' });
-    g.circle(7.6 * s, -19.4 * s, 2 * s).stroke({ width: 0.8 * s, color: PALETTE.accent });
-    dashPath(g, shieldPoints(s), 2.5 * s, 2 * s, 1 * s, PALETTE.accent);
+    drawAntenna(g, id, s, 1.1, PALETTE.bg, PALETTE.accent);
+    dashPath(g, bodyPoints(id, s), 2.5 * s, 2 * s, 1 * s, PALETTE.accent);
     const ex = 5.5 * s;
     const ey = -6 * s;
     const k = 2 * s;
@@ -517,10 +601,10 @@ export function drawDaemon(g: Graphics, r: number, style: DaemonStyle): void {
 
   if (style.quarantine) {
     // REBOOTING: translucent, dashed, asleep, with a progress bar.
-    shieldPath(g, s);
+    bodyPath(g, id, s);
     g.fill({ color, alpha: 0.4 });
-    drawAntenna(g, s, 0, PALETTE.corruptBrow, PALETTE.virusLine);
-    dashPath(g, shieldPoints(s), 3 * s, 2.5 * s, 1 * s, lerpColor(color, PALETTE.white, 0.35), 0.95);
+    drawAntenna(g, id, s, 0, PALETTE.corruptBrow, PALETTE.virusLine);
+    dashPath(g, bodyPoints(id, s), 3 * s, 2.5 * s, 1 * s, lerpColor(color, PALETTE.white, 0.35), 0.95);
     g.moveTo(-8 * s, -6 * s).quadraticCurveTo(-5.5 * s, -4 * s, -3 * s, -6 * s);
     g.moveTo(3 * s, -6 * s).quadraticCurveTo(5.5 * s, -4 * s, 8 * s, -6 * s);
     g.stroke({ width: 1.3 * s, color: PALETTE.white, cap: 'round' });
@@ -540,13 +624,13 @@ export function drawDaemon(g: Graphics, r: number, style: DaemonStyle): void {
 
   if (corrupted) {
     // CORRUPTED: the colour drains away and RGB noise rings the body.
-    shieldPath(g, s, 1, -1.6 * s, 0.6 * s);
+    bodyPath(g, id, s, 1, -1.6 * s, 0.6 * s);
     g.stroke({ width: 1.1 * s, color: PALETTE.accent });
-    shieldPath(g, s, 1, 1.6 * s, -0.6 * s);
+    bodyPath(g, id, s, 1, 1.6 * s, -0.6 * s);
     g.stroke({ width: 1.1 * s, color: PALETTE.accent2 });
-    shieldPath(g, s);
+    bodyPath(g, id, s);
     g.fill(PALETTE.corrupted);
-    drawAntenna(g, s, 0, 0x4a2f7a, 0x6a2b8f);
+    drawAntenna(g, id, s, 0, 0x4a2f7a, 0x6a2b8f);
     drawEyes(g, s, 'wide', { x: 0, y: 0 }, PALETTE.virusLine);
     g.moveTo(-9.5 * s, -12 * s).lineTo(-2.5 * s, -14.5 * s);
     g.moveTo(9.5 * s, -12 * s).lineTo(2.5 * s, -14.5 * s);
@@ -564,9 +648,9 @@ export function drawDaemon(g: Graphics, r: number, style: DaemonStyle): void {
 
   if (flash) {
     // BLINKING: the exploit is running out. Light body, same scared face.
-    shieldPath(g, s);
+    bodyPath(g, id, s);
     g.fill(PALETTE.corruptFlash).stroke({ width: 1.1 * s, color: PALETTE.accent });
-    drawAntenna(g, s, 0, PALETTE.corruptFlash, PALETTE.corruptBrow);
+    drawAntenna(g, id, s, 0, PALETTE.corruptFlash, PALETTE.corruptBrow);
     drawEyes(g, s, 'wide', { x: 0, y: 0 }, PALETTE.corruptBrow);
     g.moveTo(-9.5 * s, -12 * s).lineTo(-2.5 * s, -14.5 * s);
     g.moveTo(9.5 * s, -12 * s).lineTo(2.5 * s, -14.5 * s);
@@ -576,15 +660,14 @@ export function drawDaemon(g: Graphics, r: number, style: DaemonStyle): void {
   }
 
   // Normal / ability body.
-  shieldPath(g, s);
-  g.fill(daemonGradient(color, colorDark));
-  shieldPath(g, s, 0.82);
+  // A light rim traces the outline, so the body's shape holds up against
+  // the walls and the floor glow and not just its colour.
+  const rim = lerpColor(color, PALETTE.white, 0.55);
+  bodyPath(g, id, s);
+  g.fill(daemonGradient(color, colorDark)).stroke({ width: (ability ? 1.5 : 1.1) * s, color: ability ? PALETTE.white : rim });
+  bodyPath(g, id, s, 0.82);
   g.stroke({ width: 0.6 * s, color: PALETTE.white, alpha: 0.35 });
-  if (ability) {
-    shieldPath(g, s);
-    g.stroke({ width: 1.5 * s, color: PALETTE.white });
-  }
-  drawAntenna(g, s, ability ? -0.35 : 0, ability ? PALETTE.white : color, PALETTE.virusLine);
+  drawAntenna(g, id, s, ability ? -0.35 : 0, ability ? PALETTE.white : rim, PALETTE.virusLine);
 
   const look =
     style.lookX !== undefined || style.lookY !== undefined
@@ -640,7 +723,7 @@ export function drawDaemon(g: Graphics, r: number, style: DaemonStyle): void {
 
   if (phase) {
     // BYPASS, inside a wall: the body flickers into a dashed wireframe.
-    dashPath(g, shieldPoints(s), 3 * s, 2 * s, 1.2 * s, PALETTE.accent, 0.9);
+    dashPath(g, bodyPoints(id, s), 3 * s, 2 * s, 1.2 * s, PALETTE.accent, 0.9);
   }
 }
 

@@ -209,7 +209,8 @@ export class Hud {
     this.cw = HUD_W - 48;
 
     this.panel.clear();
-    this.panel.rect(this.panelX, 0, HUD_W, SCREEN_H).fill({ color: PALETTE.bgDeep, alpha: 0.5 });
+    // Dark enough behind the text to hold its contrast through the CRT.
+    this.panel.rect(this.panelX, 0, HUD_W, SCREEN_H).fill({ color: PALETTE.bgDeep, alpha: 0.72 });
     // Neon seam between the maze and the panel, pink at the top to cyan below.
     for (let i = 0; i < 24; i++) {
       const t = i / 23;

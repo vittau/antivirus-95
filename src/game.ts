@@ -230,9 +230,10 @@ export class Game {
 
     // Trails sit under every actor: each daemon's, then the virus's.
     const trailLayer = new Container();
-    const silhouette = new Graphics();
-    drawDaemonSilhouette(silhouette, 0, 0, DAEMON_R, PALETTE.white, 1);
     for (const def of DAEMONS) {
+      // One shared shape per daemon: each trail keeps its owner's outline.
+      const silhouette = new Graphics();
+      drawDaemonSilhouette(silhouette, def.id, 0, 0, DAEMON_R, PALETTE.white, 1);
       const shapes = Array.from({ length: TRAIL_SHAPES }, () => new Graphics(silhouette.context));
       trailLayer.addChild(...shapes);
       this.daemonTrails.set(def.id, { shapes });
@@ -427,13 +428,15 @@ export class Game {
     this.mazeFill.stroke({ width: 1, color: this.theme.accent, alpha: 0.12 });
 
     // Neon tubes: a soft halo, an inner "double wall" echo (the classic arcade
-    // two-line look), the coloured tube itself and a white-hot core.
+    // two-line look), the coloured tube itself and a warm core. Kept a notch
+    // below full brightness: the walls fill the screen, and under the bloom a
+    // white-hot tube outshines the actors, the disks and the doors.
     const outer = this.wallSegments(2);
     const inner = this.wallSegments(8);
-    this.strokeSegments(this.mazeGfx, outer, 11, 0.07);
-    this.strokeSegments(this.mazeGfx, inner, 1.5, 0.42);
-    this.strokeSegments(this.mazeGfx, outer, 3, 1);
-    this.strokeSegments(this.mazeGfx, outer, 1, 0.55, (c) => lerpColor(c, PALETTE.white, 0.75));
+    this.strokeSegments(this.mazeGfx, outer, 9, 0.05);
+    this.strokeSegments(this.mazeGfx, inner, 1.5, 0.3);
+    this.strokeSegments(this.mazeGfx, outer, 2.5, 0.82);
+    this.strokeSegments(this.mazeGfx, outer, 1, 0.35, (c) => lerpColor(c, PALETTE.white, 0.45));
 
     // The server core between the two chambers: a dark rack, drawn once here
     // (its blinking LEDs are the only per-frame part, see drawServerLeds).
@@ -1004,7 +1007,12 @@ export class Game {
 
     this.audio.updateMusic();
     this.music.update(dt);
-    if (this.crt) this.crt.update(this.elapsed);
+    if (this.crt) {
+      this.crt.update(this.elapsed);
+      // Ease the CRT over the HUD panel (past its neon seam) so the small
+      // text stays legible; the maze keeps the full effect.
+      this.crt.calmFrom(this.hud.layer.visible ? (VIEW_W + 8) / SCREEN_W : 1);
+    }
 
     this.render(dt);
     this.hud.update(this.hudState());
@@ -1620,8 +1628,8 @@ export class Game {
     if (g.mover.phase && !eaten) {
       // PHASE: the daemon de-syncs into chromatic images while in the wall.
       const j = Math.sin(this.elapsed * 40) * 1.5;
-      drawDaemonSilhouette(view, -3 + j, 0, r, PALETTE.accent, 0.45);
-      drawDaemonSilhouette(view, 3 - j, 0, r, PALETTE.accent2, 0.45);
+      drawDaemonSilhouette(view, g.id, -3 + j, 0, r, PALETTE.accent, 0.45);
+      drawDaemonSilhouette(view, g.id, 3 - j, 0, r, PALETTE.accent2, 0.45);
     }
     const span = this.quarantineSpan.get(g.id) ?? 0.001;
     drawDaemon(view, r, {

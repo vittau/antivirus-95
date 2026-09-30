@@ -15,6 +15,8 @@ export interface CrtResult {
   /** True when the custom crt-geom shader compiled; false = stock fallback. */
   custom: boolean;
   update(time: number): void;
+  /** Ease the effect from this fraction of the width rightward (the HUD); 1 = off. */
+  calmFrom(x: number): void;
   resize(w: number, h: number): void;
 }
 
@@ -35,12 +37,16 @@ export function createCRT(): CrtResult {
       noise: 0.012,
       brightness: 1.13,
       bleed: 0.22,
+      calm: 1,
     });
     return {
       filter: f,
       custom: true,
       update: (t) => {
         f.time = t;
+      },
+      calmFrom: (x) => {
+        f.calmFrom = x;
       },
       resize: (w, h) => f.resize(w, h),
     };
@@ -64,6 +70,7 @@ export function createCRT(): CrtResult {
       update: (t) => {
         fallback.time = t;
       },
+      calmFrom: () => {},
       resize: () => {},
     };
   }
