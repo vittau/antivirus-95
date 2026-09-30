@@ -14,6 +14,23 @@ import type { Dir, DaemonId } from './types';
 /** Default direction used whenever a caller omits one. */
 const FACING: Dir = 'right';
 
+/** 80s chrome lettering: sky above a hard horizon line, sunset below. */
+export const chromeFill = (): FillGradient =>
+  new FillGradient({
+    type: 'linear',
+    start: { x: 0, y: 0 },
+    end: { x: 0, y: 1 },
+    textureSpace: 'local',
+    colorStops: [
+      { offset: 0, color: PALETTE.chrome0 },
+      { offset: 0.46, color: PALETTE.chrome1 },
+      { offset: 0.5, color: PALETTE.chrome2 },
+      { offset: 0.54, color: PALETTE.sunBot },
+      { offset: 0.8, color: PALETTE.sunMid },
+      { offset: 1, color: PALETTE.sunTop },
+    ],
+  });
+
 // ---------------------------------------------------------------------------
 // The virus
 // ---------------------------------------------------------------------------
@@ -765,9 +782,35 @@ export function drawInfectedDisk(g: Graphics, x: number, y: number, s: number, g
 }
 
 /**
+ * The ring that marks an infected disk: three hazard arcs turning around it.
+ * A circle of arcs reads apart from the square bits at a glance, colour or
+ * not. `angle` spins it; `alpha` carries the disk's heartbeat.
+ */
+export function drawHazardRing(g: Graphics, x: number, y: number, r: number, angle: number, alpha: number): void {
+  const sweep = (Math.PI * 2) / 3;
+  const arc = sweep * 0.62;
+  for (let i = 0; i < 3; i++) {
+    const a0 = angle + i * sweep;
+    g.moveTo(x + Math.cos(a0) * r, y + Math.sin(a0) * r).arc(x, y, r, a0, a0 + arc);
+  }
+  g.stroke({ width: 2.2, color: PALETTE.virus, alpha, cap: 'round' });
+  // A tick at the head of each arc, pointing out: the ring reads as turning.
+  for (let i = 0; i < 3; i++) {
+    const a = angle + i * sweep + arc;
+    g.moveTo(x + Math.cos(a) * (r - 2.5), y + Math.sin(a) * (r - 2.5)).lineTo(
+      x + Math.cos(a) * (r + 2.5),
+      y + Math.sin(a) * (r + 2.5),
+    );
+  }
+  g.stroke({ width: 1.6, color: PALETTE.virusLight, alpha, cap: 'round' });
+}
+
+/**
  * A nightmare firewall door: a vertical stack of alternating bricks ringed by
- * little flames. `x`,`y` is the door tile's centre; the flames point `outward`
- * (-1 left, +1 right) toward the ring.
+ * flames. `x`,`y` is the door tile's centre; the flames point `outward`
+ * (-1 left, +1 right) toward the ring. Its rhythm is its own: the flames
+ * flicker fast and unevenly, like fire, while a scan band sweeps steadily
+ * down the bricks. `t` is the clock in seconds.
  */
 export function drawFirewall(
   g: Graphics,
@@ -777,23 +820,40 @@ export function drawFirewall(
   thick: number,
   alpha: number,
   outward: -1 | 1,
+  t: number,
 ): void {
   const n = Math.max(3, Math.round(h / 15));
   const bh = h / n;
   const edge = x + outward * (thick / 2);
+  const top = y - h / 2;
   for (let i = 0; i < n; i++) {
-    const yy = y - h / 2 + i * bh;
+    const yy = top + i * bh;
     g.roundRect(x - thick / 2, yy + 0.6, thick, bh - 1.2, 1.5).fill({
       color: i % 2 ? PALETTE.brickB : PALETTE.brickA,
       alpha,
     });
-    g.moveTo(edge, yy + bh * 0.2)
-      .lineTo(edge + outward * 7, yy + bh * 0.5)
-      .lineTo(edge, yy + bh * 0.8)
+    // Two beats at unrelated rates per tongue: never quite periodic.
+    const f = 0.5 + 0.5 * Math.sin(t * 13 + i * 2.1) * Math.sin(t * 7.7 + i * 1.3);
+    const len = 4 + 8 * f;
+    const mid = yy + bh * (0.5 + 0.08 * Math.sin(t * 9 + i));
+    g.moveTo(edge, yy + bh * 0.12)
+      .quadraticCurveTo(edge + outward * len * 0.5, yy + bh * 0.2, edge + outward * len, mid)
+      .quadraticCurveTo(edge + outward * len * 0.5, yy + bh * 0.8, edge, yy + bh * 0.88)
       .closePath()
-      .fill({ color: PALETTE.flame, alpha: alpha * 0.85 });
+      .fill({ color: PALETTE.flame, alpha: alpha * 0.9 });
+    g.moveTo(edge, yy + bh * 0.32)
+      .lineTo(edge + outward * len * 0.55, mid)
+      .lineTo(edge, yy + bh * 0.68)
+      .closePath()
+      .fill({ color: PALETTE.white, alpha: alpha * 0.7 });
   }
-  g.roundRect(x - thick / 2 - 2, y - h / 2 - 2, thick + 4, h + 4, 3).stroke({
+  // The scan band, wrapping from the bottom back to the top.
+  const band = bh * 0.7;
+  const sy = top + ((t * 0.9) % 1) * (h + band) - band;
+  const y0 = Math.max(top, sy);
+  const y1 = Math.min(top + h, sy + band);
+  if (y1 > y0) g.rect(x - thick / 2, y0, thick, y1 - y0).fill({ color: PALETTE.white, alpha: alpha * 0.45 });
+  g.roundRect(x - thick / 2 - 2, top - 2, thick + 4, h + 4, 3).stroke({
     width: 1.5,
     color: PALETTE.flame,
     alpha: alpha * 0.3,

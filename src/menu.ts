@@ -11,7 +11,7 @@ import {
   SKY,
   VIEW_W,
 } from './config';
-import { drawDaemon } from './draw';
+import { chromeFill, drawDaemon } from './draw';
 import { valueNoise } from './noise';
 import type { DaemonDef } from './config';
 import type { InputDevice } from './input';
@@ -76,23 +76,6 @@ const mkText = (
   t.anchor.set(align === 'left' ? 0 : align === 'center' ? 0.5 : 1, 0);
   return t;
 };
-
-/** 80s chrome lettering: sky above a hard horizon line, sunset below. */
-const chromeFill = (): FillGradient =>
-  new FillGradient({
-    type: 'linear',
-    start: { x: 0, y: 0 },
-    end: { x: 0, y: 1 },
-    textureSpace: 'local',
-    colorStops: [
-      { offset: 0, color: PALETTE.chrome0 },
-      { offset: 0.46, color: PALETTE.chrome1 },
-      { offset: 0.5, color: PALETTE.chrome2 },
-      { offset: 0.54, color: PALETTE.sunBot },
-      { offset: 0.8, color: PALETTE.sunMid },
-      { offset: 1, color: PALETTE.sunTop },
-    ],
-  });
 
 /** Controls legend for the device in use; both tables have the same rows. */
 const CONTROLS: Record<InputDevice, Array<[string, string]>> = {

@@ -39,6 +39,7 @@ import {
   drawDaemon,
   drawDaemonSilhouette,
   drawFirewall,
+  drawHazardRing,
   drawInfectedDisk,
   drawServerCore,
   drawSparkle,
@@ -81,6 +82,13 @@ const TRAIL_LEN = 10;
 const TRAIL_SHAPES = TRAIL_LEN / 2;
 /** Daemon body radius, in world pixels. */
 const DAEMON_R = TILE * 0.45;
+
+/** A double pulse (lub-dub) every 1.2 s, 0..~1: the infected disks' rhythm. */
+function heartbeat(t: number): number {
+  const p = t % 1.2;
+  const bump = (c: number): number => Math.exp(-((p - c) ** 2) / 0.003);
+  return bump(0.1) + 0.65 * bump(0.34);
+}
 
 /**
  * One daemon's trail: silhouettes sharing a single pre-built shape (moved,
@@ -1481,15 +1489,18 @@ export class Game {
   private drawPower(): void {
     this.powerGfx.clear();
     const g = this.powerGfx;
-    const a = 0.85 + 0.15 * Math.sin(this.elapsed * 6);
+    // The disks share one heartbeat, a double pulse (lub-dub) that nothing
+    // else on the board uses; the ring turns steadily around each.
+    const b = heartbeat(this.elapsed);
     const s = TILE * 0.028;
+    const spin = this.elapsed * 1.6;
     for (let i = 0; i < this.maze.dots.length; i++) {
       if (this.maze.dots[i] !== 2) continue;
       const x = centerOf(i % COLS);
       const y = centerOf((i / COLS) | 0);
-      // The INFECTED DISK: a floppy carrying the virus, with a pulsing glow.
-      drawInfectedDisk(g, x, y, s * (0.95 + 0.06 * a), 0.6 + 0.4 * a);
-      drawSparkle(g, x, y, TILE * 0.42, PALETTE.white, 0.3 + 0.2 * a, this.elapsed * 0.8);
+      // The INFECTED DISK: a floppy carrying the virus, inside its hazard ring.
+      drawHazardRing(g, x, y, TILE * 0.44, spin, 0.5 + 0.45 * b);
+      drawInfectedDisk(g, x, y, s * (0.95 + 0.14 * b), 0.45 + 0.55 * b);
     }
     // A spot about to get its disk back blinks, faster in the last seconds.
     for (const p of this.maze.respawns) {
@@ -1504,11 +1515,10 @@ export class Game {
   private drawDoorGfx(): void {
     const g = this.doorGfx;
     g.clear();
-    const a = 0.7 + 0.3 * Math.sin(this.elapsed * 4);
     for (const ch of QUARANTINE_CHAMBERS) {
       // A vertical firewall across each side door, flames toward the ring.
       const outward = ch.door.x < COLS / 2 ? -1 : 1;
-      drawFirewall(g, centerOf(ch.door.x), centerOf(ch.door.y), TILE, TILE * 0.26, a, outward);
+      drawFirewall(g, centerOf(ch.door.x), centerOf(ch.door.y), TILE, TILE * 0.26, 0.95, outward, this.elapsed);
     }
   }
 

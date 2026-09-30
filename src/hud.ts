@@ -11,7 +11,7 @@ import {
   STANCE_ORDER,
   VIEW_W,
 } from './config';
-import { drawDaemon, drawVirus } from './draw';
+import { chromeFill, drawDaemon, drawVirus } from './draw';
 import { lerpColor } from './color';
 import type { InputDevice } from './input';
 import type { DaemonId, Stance } from './types';
@@ -60,6 +60,8 @@ const ABILITY_GLOW_MS = 900;
 const LIVES_Y = 512;
 const PAUSE_ITEM_Y = 392;
 const PAUSE_ITEM_GAP = 30;
+/** The prompt cursor's blink period, in ms (on for the first half). */
+const CURSOR_BLINK_MS = 1060;
 
 /** Panel hints, worded for the device in use. */
 const HINTS: Record<InputDevice, { ability: string; line1: string; line2: string }> = {
@@ -103,7 +105,9 @@ export class Hud {
   private readonly highValue = mkText('000000', 13, PALETTE.accent);
   private readonly levelLabel = mkText('LEVEL', 10, PALETTE.textDim);
   private readonly levelValue = mkText('1', 13, PALETTE.accent2);
-  private readonly squadTitle = mkText('SQUAD ORDERS', 11, PALETTE.accent2);
+  private readonly squadTitle = mkText('> SQUAD ORDERS', 11, PALETTE.accent2);
+  /** The terminal cursor after the squad header. */
+  private readonly cursor = new Graphics();
   private readonly stanceNames: Text[] = [];
   private readonly stanceDescs: Text[] = [];
   private readonly barsKeyLabels: Text[] = [];
@@ -173,6 +177,7 @@ export class Hud {
       this.levelLabel,
       this.levelValue,
       this.squadTitle,
+      this.cursor,
       this.abilityLabel,
       this.abilityValue,
       this.yourDaemonLabel,
@@ -193,6 +198,10 @@ export class Hud {
       ...this.stanceDescs,
       ...this.barsKeyLabels,
     );
+
+    // The score wears the title's chrome.
+    this.scoreValue.style.fill = chromeFill();
+    this.scoreValue.style.stroke = { color: PALETTE.bgDeep, width: 2 };
 
     this.fpsBack.roundRect(10, 6, 84, 20, 4).fill({ color: PALETTE.bgDeep, alpha: 0.82 });
     this.fpsBack.roundRect(10, 6, 84, 20, 4).stroke({ width: 1, color: PALETTE.accent2, alpha: 0.4 });
@@ -221,8 +230,17 @@ export class Hud {
     }
 
     this.dividers.clear();
+    // Dividers take the seam's pink-to-cyan run and fade out at both ends.
+    const segs = 24;
+    const dw = (HUD_W - 40) / segs;
     for (const y of [104, 364, 502, 584]) {
-      this.dividers.rect(this.panelX + 20, y, HUD_W - 40, 1).fill({ color: PALETTE.accent, alpha: 0.2 });
+      for (let i = 0; i < segs; i++) {
+        const t = (i + 0.5) / segs;
+        this.dividers.rect(this.panelX + 20 + i * dw, y, dw + 0.5, 1).fill({
+          color: lerpColor(PALETTE.wallTop, PALETTE.wallBot, t),
+          alpha: 0.45 * Math.sin(Math.PI * t),
+        });
+      }
     }
 
     const x = this.cx;
@@ -234,6 +252,10 @@ export class Hud {
     this.levelLabel.position.set(col2, 68);
     this.levelValue.position.set(col2, 83);
     this.squadTitle.position.set(x, 116);
+    this.cursor.clear();
+    this.cursor
+      .rect(x + this.squadTitle.width + 5, 116, 8, 11)
+      .fill({ color: PALETTE.accent2, alpha: 0.85 });
 
     STANCE_ROW_Y.forEach((y, i) => {
       this.stanceNames[i].position.set(x + 34, y + 1);
@@ -291,6 +313,7 @@ export class Hud {
     // Hidden on the title screen: nothing else to draw.
     if (!this.layer.visible) return;
 
+    this.cursor.visible = performance.now() % CURSOR_BLINK_MS < CURSOR_BLINK_MS / 2;
     this.scoreValue.text = String(s.score).padStart(6, '0');
     this.highValue.text = String(s.high).padStart(6, '0');
     this.levelValue.text = String(s.level);
@@ -408,12 +431,19 @@ export class Hud {
     const x = this.panelX + 20;
     const w = HUD_W - 40;
 
-    this.daemonBox.clear();
-    this.daemonBox.roundRect(x, DAEMON_BOX_Y, w, DAEMON_BOX_H, 8).fill({ color: 0x120a26, alpha: 0.55 });
-    this.daemonBox.roundRect(x, DAEMON_BOX_Y, w, DAEMON_BOX_H, 8).stroke({
+    // The same card the title screen shows for the selected daemon: a wash of
+    // its colour from the left, its colour frame and a cyan outer rule.
+    const box = this.daemonBox;
+    box.clear();
+    box.roundRect(x, DAEMON_BOX_Y, w, DAEMON_BOX_H, 8).fill({ color: PALETTE.wallFill, alpha: 0.95 });
+    for (let k = 0; k < 6; k++) {
+      box.roundRect(x, DAEMON_BOX_Y, w * (0.2 + k * 0.12), DAEMON_BOX_H, 8).fill({ color: s.playerColor, alpha: 0.03 });
+    }
+    box.roundRect(x, DAEMON_BOX_Y, w, DAEMON_BOX_H, 8).stroke({ width: 2, color: s.playerColor, alpha: 0.85 });
+    box.roundRect(x - 4, DAEMON_BOX_Y - 4, w + 8, DAEMON_BOX_H + 8, 10).stroke({
       width: 1,
-      color: s.playerColor,
-      alpha: 0.7,
+      color: PALETTE.accent2,
+      alpha: 0.4,
     });
 
     this.bigDaemon.clear();
